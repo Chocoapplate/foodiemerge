@@ -151,8 +151,8 @@ export function useGame(config: GameConfig): Game {
     }
     const containerWidth = container.value!.clientWidth
     const containerHeight = container.value!.clientHeight
-    const width = containerWidth / 2
-    const height = containerHeight / 2 - 60
+    const width = containerWidth / 2 - size / 2  // Center and offset by half card size
+    const height = containerHeight / 2 - size / 2 - 60  // Center and offset by half card size
 
     floorList.forEach((o, index) => {
       indexSet.clear()
@@ -163,7 +163,7 @@ export function useGame(config: GameConfig): Game {
         while (indexSet.has(i))
           i = floor(random(0, (index + 1) ** 2))
         const row = floor(i / (index + 1))
-        const column = index ? i % index : 0
+        const column = i % (index + 1)
         const node: CardNode = {
           id: `${index}-${i}`,
           type: k,
