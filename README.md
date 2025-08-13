@@ -1,96 +1,97 @@
-<img src="https://cdn.staticaly.com/gh/chenxch/pic-image@master/20220929/image-31.5wzs9gnp33k.webp" />
+## Foodie Merge
+
+A simple, cute-styled match-3 stacking game built with Vue 3 + TypeScript + Vite.
 
 
-## ⭐ Stargazers
+## Run locally
 
-Many thanks to the kind individuals who leave a star.
-Your support is much appreciated!
-[![Stargazers for xlegex}](https://reporoster.com/stars/chenxch/xlegex)](https://github.com/chenxch/xlegex/stargazers)
+### Prerequisites
+- Node.js 16+ (recommended 18+)
+- npm (comes with Node). pnpm/yarn also work if you prefer.
 
-
-# xlegex / x了个X
-
-This is a match-3 game, a simplified version of the sheep, currently based on rabbits, you can customize your own game based on this.
-
-这是一个三消类的游戏，简化版的羊了个羊，目前是以兔子为素材，你可以基于这个定制你自己的游戏。
-
-
-
-[Online Demo / 在线demo](https://chenxch.github.io/xlegex/)
-
-## Game screenshot / 游戏截图
-![QQ浏览器截图20220922214942](https://cdn.staticaly.com/gh/chenxch/pic-image@master/20220929/tutu.4jhzwxilnfs0.gif)
-
-
-## Core Code / 核心代码
-```ts
-// useGame.ts
-useGame(config: GameConfig): Game{
-  ...
-}
+### Install
+```bash
+npm install
 ```
 
-### 
-```ts
-// type.d.ts
-interface Game {
-  nodes: Ref<CardNode[]>
-  selectedNodes: Ref<CardNode[]>
-  removeList: Ref<CardNode[]>
-  removeFlag: Ref<boolean>
-  backFlag: Ref<boolean>
-  handleSelect: (node: CardNode) => void
-  handleSelectRemove: (node: CardNode) => void
-  handleBack: () => void
-  handleRemove: () => void
-  initData: (config?: GameConfig) => void
-}
-interface GameConfig {
-  container?: Ref<HTMLElement | undefined> // cardNode容器
-  cardNum: number // card类型数量
-  layerNum: number // card层数
-  trap?: boolean //  是否开启陷阱
-  delNode?: boolean //  是否从nodes中剔除已选节点
-  events?: GameEvents //  游戏事件
-}
-
-interface GameEvents {
-  clickCallback?: () => void
-  dropCallback?: () => void
-  winCallback?: () => void
-  loseCallback?: () => void
-}
+### Start dev server
+```bash
+npm run dev
+# Default: http://localhost:5173
 ```
 
-## Application / 应用
-```ts
-const {
-  nodes,
-  selectedNodes,
-  handleSelect,
-  handleBack,
-  backFlag,
-  handleRemove,
-  removeFlag,
-  removeList,
-  handleSelectRemove,
-  initData,
-} = useGame({
-  container: containerRef,
-  cardNum: 4,
-  layerNum: 2,
-  trap: false,
-  events: {
-    clickCallback: handleClickCard,
-    dropCallback: handleDropCard,
-    winCallback: handleWin,
-    loseCallback: handleLose,
-  },
-})
-
-initData()
+### Build for production
+```bash
+npm run build
 ```
 
-## Related Articles / 相关文章
-[juejin/掘金](https://juejin.cn/post/7147245442172977189)
+### Preview production build
+```bash
+npm run preview
+```
 
+
+## Repository structure
+
+```text
+xlegex/
+  index.html                # Vite HTML entry
+  package.json              # Scripts & dependencies
+  public/
+    audio/                  # Game sounds (click, drop, win, lose, welcome)
+    vite.svg                # Favicon
+  src/
+    App.vue                 # Main game UI & level flow
+    main.ts                 # Vue bootstrap
+    components/
+      card.vue              # Single card component (renders an icon)
+    core/
+      useGame.ts            # Core game logic (selection, matching, win/lose)
+      utils.ts              # Celebration/confetti helpers
+    assets/
+      Icons/                # Food icon set used by cards
+    style.css               # Global styles (UnoCSS utilities also used)
+    types/
+      type.d.ts             # Shared TypeScript types
+  vite.config.ts            # Vite config
+  unocss.config.ts          # UnoCSS config
+```
+
+
+## Configure gameplay
+
+### Difficulty and levels
+Edit the `LevelConfig` array in `src/App.vue` to control each level:
+
+```ts
+const LevelConfig = [
+  { cardNum: 2,  layerNum: 2, trap: false },  // Level 1 (tutorial)
+  { cardNum: 5,  layerNum: 3, trap: false },
+  { cardNum: 9,  layerNum: 3, trap: false },
+  { cardNum: 10, layerNum: 4, trap: false },
+  { cardNum: 12, layerNum: 5, trap: false },
+  { cardNum: 15, layerNum: 6, trap: true  },  // Final level with traps
+]
+```
+
+- cardNum: number of distinct card types in the level
+- layerNum: depth/stacking layers (more layers → more cards blocked)
+- trap: enables “trap mode” (some cards are removed at generation)
+
+The total number of blocks roughly follows: total ≈ `cardNum × 3 × layerNum`.
+
+### Icons & assets
+- Card images are auto-loaded from `src/assets/Icons/*.png`.
+- Sounds live in `public/audio/` and are referenced in `src/App.vue`.
+
+
+## Scripts
+- **dev**: start Vite dev server
+- **build**: type-check and build
+- **preview**: preview the production build locally
+
+```bash
+npm run dev
+npm run build
+npm run preview
+```
