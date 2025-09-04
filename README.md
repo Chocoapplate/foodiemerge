@@ -34,7 +34,7 @@ npm run preview
 ## Repository structure
 
 ```text
-xlegex/
+foodiemerge/
   index.html                # Vite HTML entry
   package.json              # Scripts & dependencies
   public/

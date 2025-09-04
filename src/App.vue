@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { onMounted, onUnmounted, nextTick, ref } from 'vue'
 import Card from './components/card.vue'
 import { useGame } from './core/useGame'
 import { basicCannon, schoolPride } from './core/utils'
@@ -14,15 +14,16 @@ const curLevel = ref(1)
 const showTip = ref(false)
 const showFailPopup = ref(false)
 const LevelConfig = [
-  { cardNum: 2, layerNum: 2, trap: false },   // Level 1: 12 blocks
-  { cardNum: 5, layerNum: 3, trap: false },   // Level 2: 45 blocks
-  { cardNum: 9, layerNum: 3, trap: false },   // Level 3: 81 blocks
-  { cardNum: 10, layerNum: 4, trap: false },  // Level 4: 120 blocks
-  { cardNum: 12, layerNum: 5, trap: false },  // Level 5: 180 blocks
-  { cardNum: 15, layerNum: 6, trap: true },   // Level 6: 270 blocks (with traps!)
+  { cardNum: 3, layerNum: 2, trap: false },   // Level 1: 3 different cards
+  { cardNum: 7, layerNum: 3, trap: false },   // Level 2: 7 different cards
+  { cardNum: 10, layerNum: 3, trap: false },  // Level 3: 10 different cards
+  { cardNum: 15, layerNum: 4, trap: false },  // Level 4: 15 different cards
+  { cardNum: 18, layerNum: 5, trap: false },  // Level 5: 18 different cards
 ]
 
 const isWin = ref(false)
+const showDebugMenu = ref(import.meta.env.DEV) // Only show in development
+const resizeTimeout = ref<NodeJS.Timeout | null>(null)
 
 const {
   nodes,
@@ -64,17 +65,16 @@ function handleDropCard() {
 
 function handleWin() {
   winAudioRef.value?.play()
-  // fireworks()
   if (curLevel.value < LevelConfig.length) {
     basicCannon()
     showTip.value = true
     setTimeout(() => {
       showTip.value = false
-    }, 1500)
+    }, 3000)
     setTimeout(() => {
       initData(LevelConfig[curLevel.value])
       curLevel.value++
-    }, 2000)
+    }, 3500)
   }
   else {
     isWin.value = true
@@ -91,23 +91,71 @@ function handleLose() {
 
 function handleRetry() {
   showFailPopup.value = false
-    nodes.value = []
-    removeList.value = []
-    selectedNodes.value = []
-    welAudioRef.value?.play()
-    curLevel.value = 0
-    showTip.value = true
-    setTimeout(() => {
-      showTip.value = false
-    }, 1500)
-    setTimeout(() => {
-      initData(LevelConfig[curLevel.value])
-      curLevel.value++
-    }, 2000)
+  nodes.value = []
+  removeList.value = []
+  selectedNodes.value = []
+  welAudioRef.value?.play()
+  curLevel.value = 1
+  initData(LevelConfig[0]) // Start directly at level 1
 }
 
-onMounted(() => {
+// Debug functions
+function debugTriggerFinalCompletion() {
+  isWin.value = true
+  schoolPride()
+}
+
+function debugWinCurrentLevel() {
+  handleWin()
+}
+
+// Handle window resize for responsive card positioning
+function handleResize() {
+  // Debounce resize events to avoid excessive recalculations
+  if (resizeTimeout.value) {
+    clearTimeout(resizeTimeout.value)
+  }
+  resizeTimeout.value = setTimeout(() => {
+    // Always recalculate positions on resize, regardless of game state
+    // This ensures cards reposition even during gameplay
+    const currentConfig = LevelConfig[curLevel.value - 1]
+    initData(currentConfig)
+  }, 100) // Reduced debounce time for more responsive updates
+}
+
+onMounted(async () => {
   initData()
+  
+  // Add window resize listener
+  window.addEventListener('resize', handleResize)
+  
+  // Wait for DOM to be ready before setting up ResizeObserver
+  await nextTick()
+  
+  // Also use ResizeObserver for more accurate container size detection
+  if (containerRef.value && 'ResizeObserver' in window) {
+    const resizeObserver = new ResizeObserver(() => {
+      handleResize()
+    })
+    resizeObserver.observe(containerRef.value)
+    
+    // Store observer for cleanup
+    ;(containerRef.value as any)._resizeObserver = resizeObserver
+  }
+})
+
+onUnmounted(() => {
+  // Clean up resize listener and timeout
+  window.removeEventListener('resize', handleResize)
+  if (resizeTimeout.value) {
+    clearTimeout(resizeTimeout.value)
+    resizeTimeout.value = null
+  }
+  
+  // Clean up ResizeObserver
+  if (containerRef.value && (containerRef.value as any)._resizeObserver) {
+    ;(containerRef.value as any)._resizeObserver.disconnect()
+  }
 })
 </script>
 
@@ -115,28 +163,38 @@ onMounted(() => {
   <div class="game-container" flex flex-col w-full h-full>
     <!-- Game Title -->
     <div class="game-title" text-center w-full flex items-center justify-center>
-      Foodie Merge
+      <img src="/src/assets/logo.png" alt="Foodie Merge" class="logo-image" />
     </div>
 
     <!-- Main Game Area -->
     <div ref="containerRef" class="game-area" flex-1 flex>
-      <div w-full relative flex-1>
-        <template v-for="item in nodes" :key="item.id">
-          <transition name="slide-fade">
-            <Card
-              v-if="[0, 1].includes(item.state)"
-              :node="item"
-              @click-card="handleSelect"
-            />
-          </transition>
-        </template>
+      <div class="game-boundary">
+        <div class="cards-container" w-full relative flex-1>
+          <template v-for="item in nodes" :key="item.id">
+            <transition name="slide-fade">
+              <Card
+                v-if="[0, 1].includes(item.state)"
+                :node="item"
+                @click-card="handleSelect"
+              />
+            </transition>
+          </template>
+        </div>
       </div>
-      <transition name="bounce">
-        <div v-if="isWin" class="win-message" flex items-center justify-center w-full>
+    </div>
+
+    <!-- Final Completion Message Overlay -->
+    <transition name="bounce">
+      <div v-if="isWin" class="win-message-overlay">
+        <div class="win-message" flex items-center justify-center w-full>
           Congratulations! You're a Foodie Master!
         </div>
-      </transition>
-      <!-- Level popup will be moved to modal section -->
+      </div>
+    </transition>
+
+    <!-- Level Indicator -->
+    <div class="level-indicator">
+      Level {{ curLevel }}
     </div>
 
     <!-- Remove List Area -->
@@ -165,11 +223,22 @@ onMounted(() => {
 
     <!-- Control Buttons -->
     <div class="controls-area" flex items-center w-full justify-center>
-      <button class="game-button" :disabled="removeFlag" @click="handleRemove">
+      <button class="game-button remove-button" :disabled="removeFlag" @click="handleRemove">
         Remove 3
       </button>
-      <button class="game-button" :disabled="backFlag" @click="handleBack">
+      <button class="game-button undo-button" :disabled="backFlag" @click="handleBack">
         Undo
+      </button>
+    </div>
+
+    <!-- Debug Menu (Development Only) -->
+    <div v-if="showDebugMenu" class="debug-menu">
+      <h3 class="debug-title">Debug Menu</h3>
+      <button class="debug-button" @click="debugTriggerFinalCompletion">
+        Trigger Final Completion
+      </button>
+      <button class="debug-button" @click="debugWinCurrentLevel">
+        Win Current Level
       </button>
     </div>
 
@@ -177,14 +246,8 @@ onMounted(() => {
     <transition name="fade">
       <div v-if="showFailPopup" class="popup-overlay" @click="handleRetry">
         <div class="fail-popup" @click.stop>
-          <div class="popup-content">
-            <div class="fail-icon">×</div>
-            <h2 class="fail-title">Oops! Slots Full!</h2>
-            <p class="fail-message">Don't give up! Try again and become a Foodie Master!</p>
-            <button class="retry-button" @click="handleRetry">
-              Try Again
-            </button>
-          </div>
+          <img src="/src/assets/fail.png" alt="Failure! Oops, Slots full!" class="fail-image" />
+          <button class="retry-button image-button" @click="handleRetry"></button>
         </div>
       </div>
     </transition>
@@ -193,11 +256,7 @@ onMounted(() => {
     <transition name="fade">
       <div v-if="showTip" class="popup-overlay">
         <div class="level-popup" @click.stop>
-          <div class="popup-content">
-            <div class="level-icon">★</div>
-            <h2 class="level-title">Level {{ curLevel + 1 }}</h2>
-            <p class="level-message">Get ready for the next challenge!</p>
-          </div>
+          <img src="/src/assets/success.png" alt="Level Complete! Get ready for the next challenge!" class="level-success-image" />
         </div>
     </div>
     </transition>
@@ -219,7 +278,7 @@ onMounted(() => {
       ref="winAudioRef"
       style="display: none;"
       controls
-      src="./audio/win.mp3"
+      src="./audio/win2.mp3"
     />
     <audio
       ref="loseAudioRef"
@@ -238,11 +297,18 @@ onMounted(() => {
 
 <style>
 body {
-  background: linear-gradient(135deg, #FFE4A3 0%, #FFCC70 50%, #FFB347 100%);
+  background: url('/src/assets/backgrounds/background1-restaurant.png') center center / cover no-repeat,
+              linear-gradient(135deg, #FFE4A3 0%, #FFCC70 50%, #FFB347 100%);
   min-height: 100vh;
-  font-family: 'Comic Sans MS', cursive, sans-serif;
+  font-family: 'Nunito', 'Quicksand', 'Comfortaa', 'Fredoka One', system-ui, -apple-system, sans-serif;
   margin: 0;
   padding: 0;
+}
+
+/* Remove focus outlines from all buttons */
+button:focus {
+  outline: none !important;
+  box-shadow: none !important;
 }
 
 .game-container {
@@ -252,44 +318,98 @@ body {
   box-sizing: border-box;
   display: flex;
   flex-direction: column;
+  background: rgba(255, 255, 255, 0.1);
+  backdrop-filter: blur(2px);
+  position: relative;
 }
 
 /* Responsive spacing for mobile devices */
 @media (max-width: 480px) {
   .game-container {
-    padding: 15px;
+    padding: 10px;
   }
   
   .game-title {
-    font-size: 36px;
-    margin-bottom: 15px;
+    height: 150px;
+    margin-bottom: 5px;
+  }
+  
+  .logo-image {
+    max-height: 130px;
+    width: 250px;
   }
   
   .dock-area {
     padding: 0 5px;
+    margin-bottom: 15px;
   }
   
   .remove-area {
     padding: 0 5px;
+    margin-bottom: 10px;
+  }
+  
+  .controls-area {
+    margin-bottom: 10px;
+    gap: 12px;
   }
 }
 
 .game-title {
-  font-size: 48px;
-  font-weight: 900;
-  color: #FF6B35;
-  text-shadow: 3px 3px 0px #FFF, 6px 6px 10px rgba(0,0,0,0.3);
-  letter-spacing: 2px;
-  background: linear-gradient(45deg, #FF6B35, #F7931E, #FFD23F);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  animation: titlePulse 2s ease-in-out infinite alternate;
-  height: 80px;
-  margin-bottom: 20px;
+  height: 150px;
+  margin-bottom: 5px;
+  position: relative;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.logo-image {
+  max-height: 130px;
+  width: 250px;
+  height: auto;
+  object-fit: contain;
+  filter: drop-shadow(0 4px 8px rgba(0,0,0,0.3));
 }
 
 .game-area {
   margin-bottom: 20px;
+  padding: 10px;
+  min-height: 360px;
+  max-height: 72vh;
+  overflow: hidden;
+}
+
+.game-boundary {
+  width: 100%;
+  height: 100%;
+  border: 2px dashed rgba(210, 180, 140, 0.3);
+  border-radius: 8px;
+  padding: 10px;
+  position: relative;
+  background: rgba(255, 248, 220, 0.1);
+  backdrop-filter: blur(1px);
+}
+
+.cards-container {
+  width: 100%;
+  height: 100%;
+  position: relative;
+  overflow: hidden;
+}
+
+/* Mobile adjustments for game area */
+@media (max-width: 480px) {
+  .game-area {
+    max-height: 60vh;
+    min-height: 300px;
+    padding: 5px;
+  }
+  
+  .game-boundary {
+    padding: 5px;
+  }
 }
 
 .remove-area {
@@ -307,6 +427,7 @@ body {
   height: 70px;
   gap: 16px;
   margin-bottom: 20px;
+  background: transparent;
 }
 
 @keyframes titlePulse {
@@ -315,57 +436,97 @@ body {
 }
 
 .game-button {
-  background: linear-gradient(45deg, #FF6B94, #FF8E94);
-  border: 3px solid #FFF;
-  border-radius: 25px;
-  padding: 12px 24px;
-  font-size: 16px;
-  font-weight: bold;
-  color: white;
-  text-shadow: 1px 1px 2px rgba(0,0,0,0.3);
-  box-shadow: 0 6px 15px rgba(0,0,0,0.2), inset 0 1px 0 rgba(255,255,255,0.3);
+  border: none;
+  border-radius: 0;
+  padding: 0;
+  font-size: 0;
   cursor: pointer;
   transition: all 0.2s ease;
-  font-family: 'Comic Sans MS', cursive, sans-serif;
+  font-family: 'Nunito', 'Quicksand', 'Comfortaa', 'Fredoka One', system-ui, -apple-system, sans-serif;
+  background-size: contain;
+  background-repeat: no-repeat;
+  background-position: center;
+  background-color: transparent;
+  outline: none;
+}
+
+.game-button:focus {
+  outline: none;
+  box-shadow: none;
+}
+
+.remove-button {
+  background-image: url('/src/assets/UI/ui1-remove3.png');
+  width: 140px;
+  height: 57px;
+}
+
+.undo-button {
+  background-image: url('/src/assets/UI/ui2-undo.png');
+  width: 120px;
+  height: 60px;
 }
 
 .game-button:hover:not(:disabled) {
-  transform: translateY(-2px);
-  box-shadow: 0 8px 20px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.3);
+  transform: translateY(-2px) scale(1.05);
+  filter: brightness(1.1) drop-shadow(0 6px 16px rgba(0,0,0,0.3));
 }
 
 .game-button:active:not(:disabled) {
-  transform: translateY(0);
-  box-shadow: 0 4px 10px rgba(0,0,0,0.2), inset 0 1px 0 rgba(255,255,255,0.3);
+  transform: translateY(0) scale(1.02);
+  filter: brightness(0.9);
 }
 
 .game-button:disabled {
-  background: linear-gradient(45deg, #CCC, #AAA);
   cursor: not-allowed;
-  opacity: 0.6;
+  opacity: 0.5;
+  filter: grayscale(100%) brightness(0.8);
+}
+
+.win-message-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  background: rgba(0, 0, 0, 0.3);
+  backdrop-filter: blur(2px);
 }
 
 .win-message {
-  font-size: 32px;
+  font-size: clamp(18px, 4vw, 32px);
   font-weight: bold;
-  color: #FF6B35;
-  text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
-  background: rgba(255,255,255,0.9);
-  border-radius: 20px;
-  padding: 25px 30px;
-  margin: 30px 20px;
-  box-shadow: 0 10px 30px rgba(0,0,0,0.3);
-  border: 3px solid #FFD23F;
-  max-width: 90%;
+  color: #8B4513;
+  text-shadow: 2px 2px 4px rgba(255,255,255,0.8);
+  background: linear-gradient(145deg, #FFF8DC, #F5F5DC);
+  border-radius: 12px;
+  padding: clamp(15px, 3vw, 25px) clamp(20px, 4vw, 30px);
+  margin: clamp(15px, 3vw, 30px) clamp(10px, 2vw, 20px);
+  box-shadow: 
+    0 4px 8px rgba(0,0,0,0.15),
+    0 2px 4px rgba(0,0,0,0.1),
+    inset 0 1px 0 rgba(255,255,255,0.8);
+  border: 2px solid #D2B48C;
+  max-width: 95%;
+  width: fit-content;
+  text-align: center;
+  line-height: 1.2;
+  font-family: 'Nunito', 'Quicksand', 'Comfortaa', 'Fredoka One', system-ui, -apple-system, sans-serif;
 }
 
-/* Level display styles moved to level-popup modal */
 
 .card-dock {
-  background: rgba(255,255,255,0.8);
-  border: 4px solid #FF6B94;
-  border-radius: 20px;
-  box-shadow: inset 0 4px 8px rgba(0,0,0,0.1), 0 4px 15px rgba(0,0,0,0.2);
+  background: linear-gradient(145deg, #FFF8DC, #F5F5DC);
+  border: 2px solid #D2B48C;
+  border-radius: 12px;
+  box-shadow: 
+    0 4px 8px rgba(0,0,0,0.15),
+    0 2px 4px rgba(0,0,0,0.1),
+    inset 0 1px 0 rgba(255,255,255,0.8);
   backdrop-filter: blur(10px);
   padding: 8px;
   gap: 4px;
@@ -387,114 +548,234 @@ body {
 }
 
 .fail-popup {
-  background: linear-gradient(135deg, #FF6B94, #FF8E94, #FFA5A5);
-  border-radius: 30px;
-  padding: 0;
+  background: transparent;
+  border-radius: 0;
+  padding: 20px;
   max-width: 90%;
-  width: 400px;
-  box-shadow: 
-    0 20px 60px rgba(0,0,0,0.3),
-    0 8px 30px rgba(0,0,0,0.2),
-    inset 0 1px 0 rgba(255,255,255,0.3);
-  border: 4px solid #FFF;
+  width: auto;
+  box-shadow: none;
+  border: none;
   animation: popupBounce 0.5s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 20px;
 }
 
-.popup-content {
-  background: rgba(255,255,255,0.95);
-  border-radius: 25px;
-  padding: 30px;
-  text-align: center;
-  margin: 4px;
+.fail-image {
+  max-width: 400px;
+  max-height: 300px;
+  width: auto;
+  height: auto;
+  object-fit: contain;
+  filter: drop-shadow(0 8px 16px rgba(0,0,0,0.3));
 }
 
-.fail-icon {
-  font-size: 64px;
-  margin-bottom: 15px;
-  animation: wiggle 0.5s ease-in-out infinite alternate;
-  color: #FF6B35;
-  font-weight: bold;
-}
 
 .level-popup {
-  background: linear-gradient(135deg, #4ECDC4, #44A08D, #26D0CE);
-  border-radius: 30px;
-  padding: 0;
+  background: transparent;
+  border-radius: 0;
+  padding: 20px;
   max-width: 90%;
-  width: 400px;
-  box-shadow: 
-    0 20px 60px rgba(0,0,0,0.3),
-    0 8px 30px rgba(0,0,0,0.2),
-    inset 0 1px 0 rgba(255,255,255,0.3);
-  border: 4px solid #FFF;
+  width: auto;
+  box-shadow: none;
+  border: none;
   animation: popupBounce 0.5s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.level-success-image {
+  max-width: 400px;
+  max-height: 300px;
+  width: auto;
+  height: auto;
+  object-fit: contain;
+  filter: drop-shadow(0 8px 16px rgba(0,0,0,0.3));
 }
 
 .level-icon {
   font-size: 64px;
   margin-bottom: 15px;
   animation: sparkle 1s ease-in-out infinite alternate;
-  color: #FFD700;
-  text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+  color: #D2B48C;
+  text-shadow: 2px 2px 4px rgba(255,255,255,0.8);
 }
 
 .level-title {
   font-size: 28px;
   font-weight: bold;
-  color: #4ECDC4;
+  color: #8B4513;
   margin: 0 0 15px 0;
-  text-shadow: 2px 2px 4px rgba(0,0,0,0.2);
-  font-family: 'Comic Sans MS', cursive, sans-serif;
+  text-shadow: 2px 2px 4px rgba(255,255,255,0.8);
+  font-family: 'Nunito', 'Quicksand', 'Comfortaa', 'Fredoka One', system-ui, -apple-system, sans-serif;
 }
 
 .level-message {
   font-size: 18px;
-  color: #666;
+  color: #8B4513;
   margin: 0 0 25px 0;
   line-height: 1.4;
-  font-family: 'Comic Sans MS', cursive, sans-serif;
+  font-family: 'Nunito', 'Quicksand', 'Comfortaa', 'Fredoka One', system-ui, -apple-system, sans-serif;
 }
 
-.fail-title {
-  font-size: 28px;
-  font-weight: bold;
-  color: #FF6B35;
-  margin: 0 0 15px 0;
-  text-shadow: 2px 2px 4px rgba(0,0,0,0.2);
-  font-family: 'Comic Sans MS', cursive, sans-serif;
-}
 
-.fail-message {
-  font-size: 18px;
-  color: #666;
-  margin: 0 0 25px 0;
-  line-height: 1.4;
-  font-family: 'Comic Sans MS', cursive, sans-serif;
-}
 
 .retry-button {
-  background: linear-gradient(45deg, #4ECDC4, #44A08D);
-  border: 3px solid #FFF;
-  border-radius: 25px;
+  background: linear-gradient(145deg, #FFF8DC, #F5F5DC);
+  border: 2px solid #D2B48C;
+  border-radius: 12px;
   padding: 15px 30px;
   font-size: 18px;
   font-weight: bold;
-  color: white;
-  text-shadow: 1px 1px 2px rgba(0,0,0,0.3);
-  box-shadow: 0 6px 20px rgba(0,0,0,0.25), inset 0 1px 0 rgba(255,255,255,0.3);
+  color: #FF6B35;
+  text-shadow: 1px 1px 2px rgba(255,255,255,0.8);
+  box-shadow: 
+    0 4px 8px rgba(0,0,0,0.15),
+    0 2px 4px rgba(0,0,0,0.1),
+    inset 0 1px 0 rgba(255,255,255,0.8);
   cursor: pointer;
   transition: all 0.2s ease;
-  font-family: 'Comic Sans MS', cursive, sans-serif;
+  font-family: 'Nunito', 'Quicksand', 'Comfortaa', 'Fredoka One', system-ui, -apple-system, sans-serif;
+}
+
+.retry-button.image-button {
+  background-image: url('/src/assets/UI/ui3-tryagain.png');
+  background-size: contain;
+  background-repeat: no-repeat;
+  background-position: center;
+  background-color: transparent;
+  border: none;
+  border-radius: 0;
+  padding: 0;
+  font-size: 0;
+  width: 180px;
+  height: 70px;
+  box-shadow: none;
+}
+
+.retry-button.image-button:hover {
+  filter: brightness(1.1);
+  transform: translateY(-2px);
+}
+
+.retry-button.image-button:active {
+  filter: brightness(0.9);
+  transform: translateY(0);
+}
+
+.retry-button.image-button:focus {
+  outline: none;
+  box-shadow: none;
 }
 
 .retry-button:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 8px 25px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.3);
+  transform: translateY(-2px) scale(1.05);
+  box-shadow: 
+    0 6px 16px rgba(0,0,0,0.2),
+    0 3px 6px rgba(0,0,0,0.15),
+    inset 0 1px 0 rgba(255,255,255,0.9);
+  border-color: #CD853F;
 }
 
 .retry-button:active {
-  transform: translateY(0);
-  box-shadow: 0 4px 15px rgba(0,0,0,0.25), inset 0 2px 4px rgba(0,0,0,0.1);
+  transform: translateY(0) scale(1.02);
+  box-shadow: 
+    0 2px 4px rgba(0,0,0,0.2),
+    inset 0 2px 4px rgba(0,0,0,0.1);
+}
+
+/* Level Indicator Styles */
+.level-indicator {
+  text-align: center;
+  font-size: 24px;
+  font-weight: 900;
+  color: #8B4513;
+  margin: 15px 0;
+  padding: 0;
+  background: none;
+  border: none;
+  box-shadow: none;
+  display: inline-block;
+  font-family: 'Fredoka One', 'Comfortaa', 'Nunito', system-ui, -apple-system, sans-serif;
+  text-shadow: 
+    3px 3px 0px #FFE4E1,
+    -1px -1px 0px #FFE4E1,
+    1px -1px 0px #FFE4E1,
+    -1px 1px 0px #FFE4E1,
+    1px 1px 0px #FFE4E1,
+    4px 4px 8px rgba(0,0,0,0.3);
+  letter-spacing: 1px;
+  transform: rotate(-2deg);
+  animation: levelFloat 3s ease-in-out infinite;
+}
+
+@keyframes levelFloat {
+  0%, 100% {
+    transform: rotate(-2deg) translateY(0px);
+  }
+  50% {
+    transform: rotate(2deg) translateY(-8px);
+  }
+}
+
+@media (max-width: 480px) {
+  .level-indicator {
+    font-size: 20px;
+    margin: 12px 0;
+    text-shadow: 
+      2px 2px 0px #FFE4E1,
+      -1px -1px 0px #FFE4E1,
+      1px -1px 0px #FFE4E1,
+      -1px 1px 0px #FFE4E1,
+      1px 1px 0px #FFE4E1,
+      3px 3px 6px rgba(0,0,0,0.3);
+  }
+}
+
+/* Debug Menu Styles */
+.debug-menu {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  background: rgba(0, 0, 0, 0.8);
+  color: white;
+  padding: 15px;
+  border-radius: 8px;
+  border: 2px solid #ff0000;
+  z-index: 9999;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 200px;
+}
+
+.debug-title {
+  margin: 0 0 10px 0;
+  font-size: 16px;
+  font-weight: bold;
+  color: #ff0000;
+  text-align: center;
+}
+
+.debug-button {
+  background: #ff0000;
+  color: white;
+  border: none;
+  padding: 8px 12px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 12px;
+  transition: background 0.2s ease;
+}
+
+.debug-button:hover {
+  background: #cc0000;
+}
+
+.debug-button:active {
+  background: #990000;
 }
 
 /* Popup Animations */

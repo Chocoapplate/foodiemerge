@@ -18,7 +18,7 @@ export function fireworks() {
     return Math.random() * (max - min) + min
   }
 
-  const interval = setInterval(() => {
+  const interval: NodeJS.Timeout = setInterval(() => {
     const timeLeft = animationEnd - Date.now()
 
     if (timeLeft <= 0)

@@ -37,20 +37,19 @@ export function useGame(config: GameConfig): Game {
     if (index > -1)
       delNode && nodes.value.splice(index, 1)
 
-    // 判断是否有可以消除的节点
+    // Check if there are nodes that can be eliminated
     const selectedSomeNode = selectedNodes.value.filter(s => s.type === node.type)
     if (selectedSomeNode.length === 2) {
-      // 第二个节点索引
+      // Second node index
       const secondIndex = selectedNodes.value.findIndex(o => o.id === selectedSomeNode[1].id)
       selectedNodes.value.splice(secondIndex + 1, 0, node)
-      // 为了动画效果添加延迟
+      // Add delay for animation effect
       setTimeout(() => {
         for (let i = 0; i < 3; i++) {
-          // const index = selectedNodes.value.findIndex(o => o.type === node.type)
           selectedNodes.value.splice(secondIndex - 1, 1)
         }
         preNode.value = null
-        // 判断是否已经清空节点，即是否胜利
+        // Check if all nodes are cleared (victory condition)
         if (delNode ? nodes.value.length === 0 : nodes.value.every(o => o.state > 0) && removeList.value.length === 0 && selectedNodes.value.length === 0) {
           removeFlag.value = true
           backFlag.value = true
@@ -68,7 +67,7 @@ export function useGame(config: GameConfig): Game {
         selectedNodes.value.splice(index + 1, 0, node)
       else
         selectedNodes.value.push(node)
-      // 判断卡槽是否已满，即失败
+      // Check if card slots are full (failure condition)
       if (selectedNodes.value.length === 7) {
         removeFlag.value = true
         backFlag.value = true
@@ -97,8 +96,7 @@ export function useGame(config: GameConfig): Game {
   }
 
   function handleRemove() {
-  // 从selectedNodes.value中取出3个 到 removeList.value中
-
+    // Take 3 nodes from selectedNodes and move to removeList
     if (selectedNodes.value.length < 3)
       return
     removeFlag.value = true
@@ -125,20 +123,21 @@ export function useGame(config: GameConfig): Game {
     floorList = []
     const isTrap = trap && floor(random(0, 100)) !== 50
 
-    // 生成节点池
+    // Generate card pool
     const itemTypes = (new Array(cardNum).fill(0)).map((_, index) => index + 1)
     let itemList: number[] = []
-    for (let i = 0; i < 3 * layerNum; i++)
+    // Formula: Total Cards = 3 × cardNum × (layerNum - 1)
+    for (let i = 0; i < 3 * (layerNum - 1); i++)
       itemList = [...itemList, ...itemTypes]
 
     if (isTrap) {
       const len = itemList.length
       itemList.splice(len - cardNum, len)
     }
-    // 打乱节点
+    // Shuffle cards
     itemList = shuffle(shuffle(itemList))
 
-    // 初始化各个层级节点
+    // Initialize nodes for each layer
     let len = 0
     let floorIndex = 1
     const itemLength = itemList.length
@@ -151,40 +150,84 @@ export function useGame(config: GameConfig): Game {
     }
     const containerWidth = container.value!.clientWidth
     const containerHeight = container.value!.clientHeight
-    const width = containerWidth / 2 - size / 2  // Center and offset by half card size
-    const height = containerHeight / 2 - size / 2 - 60  // Center and offset by half card size
-
-    floorList.forEach((o, index) => {
-      indexSet.clear()
-      let i = 0
-      const floorNodes: CardNode[] = []
-      o.forEach((k) => {
-        i = floor(random(0, (index + 1) ** 2))
+    
+    // First, calculate all card positions with origin at (0,0)
+    let minX = Infinity, maxX = -Infinity
+    let minY = Infinity, maxY = -Infinity
+    
+    // Temporary array to store all card positions
+    const tempNodes: Array<{row: number, column: number, floorIndex: number}> = []
+    
+    floorList.forEach((o, floorIndex) => {
+      const floorSize = floorIndex + 1
+      const indexSet = new Set()
+      
+      o.forEach(() => {
+        let i = floor(random(0, floorSize ** 2))
         while (indexSet.has(i))
-          i = floor(random(0, (index + 1) ** 2))
-        const row = floor(i / (index + 1))
-        const column = i % (index + 1)
+          i = floor(random(0, floorSize ** 2))
+        
+        const row = floor(i / floorSize)
+        const column = i % floorSize
+        
+        // Calculate position relative to origin
+        const x = size * column - (size / 2) * floorIndex
+        const y = size * row - (size / 2) * floorIndex
+        
+        minX = Math.min(minX, x)
+        maxX = Math.max(maxX, x + size)
+        minY = Math.min(minY, y)
+        maxY = Math.max(maxY, y + size)
+        
+        tempNodes.push({ row, column, floorIndex })
+        indexSet.add(i)
+      })
+    })
+    
+    // Calculate the total bounds of all cards
+    const totalWidth = maxX - minX
+    const totalHeight = maxY - minY
+    
+    // Center the entire card layout in the container
+    const offsetX = (containerWidth - totalWidth) / 2 - minX
+    const offsetY = (containerHeight - totalHeight) / 2 - minY
+
+    // Now create the actual card nodes using the pre-calculated positions and centering offset
+    let tempNodeIndex = 0
+    floorList.forEach((o, floorIndex) => {
+      const floorNodes: CardNode[] = []
+      
+      o.forEach((k) => {
+        const tempNode = tempNodes[tempNodeIndex++]
+        const { row, column } = tempNode
+        
+        // Apply the centering offset to the original position calculation
+        const originalX = size * column - (size / 2) * floorIndex
+        const originalY = size * row - (size / 2) * floorIndex
+        
         const node: CardNode = {
-          id: `${index}-${i}`,
+          id: `${floorIndex}-${row}-${column}`,
           type: k,
-          zIndex:
-        index,
-          index: i,
+          zIndex: floorIndex,
+          index: row * (floorIndex + 1) + column,
           row,
           column,
-          top: height + (size * row - (size / 2) * index),
-          left: width + (size * column - (size / 2) * index),
+          top: originalY + offsetY,
+          left: originalX + offsetX,
           parents: [],
           state: 0,
         }
+        
+        // Check for parent relationships
         const xy = [node.top, node.left]
         perFloorNodes.forEach((e) => {
           if (Math.abs(e.top - xy[0]) <= size && Math.abs(e.left - xy[1]) <= size)
             e.parents.push(node)
         })
+        
         floorNodes.push(node)
-        indexSet.add(i)
       })
+      
       nodes.value = nodes.value.concat(floorNodes)
       perFloorNodes = floorNodes
     })

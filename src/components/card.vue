@@ -3,14 +3,14 @@ import { computed } from 'vue'
 const props = defineProps<Props>()
 const emit = defineEmits(['clickCard'])
 
-// 加载图片资源
+// Load image resources
 const modules = import.meta.glob('../assets/Icons/*.png', {
   as: 'url',
   import: 'default',
   eager: true,
 })
 
-// 创建从卡片类型数字到图标名称的映射
+// Create mapping from card type numbers to icon names
 const ICON_MAPPING: Record<number, string> = {
   1: 'icons8-kawaii-bread-50',
   2: 'icons8-kawaii-cupcake-50',
@@ -26,7 +26,10 @@ const ICON_MAPPING: Record<number, string> = {
   12: 'icons8-apple-pie-50',
   13: 'icons8-merry-pie-50',
   14: 'icons8-pretzel-50',
-  15: 'icons8-baguette-50'
+  15: 'icons8-baguette-50',
+  16: 'icons8-bread-50',
+  17: 'icons8-naan-50',
+  18: 'icons8-sliced-bread-50'
 }
 
 const IMG_MAP = Object.keys(modules).reduce((acc, cur) => {
@@ -56,9 +59,7 @@ function handleClick() {
     :style="isDock ? {} : { position: 'absolute', zIndex: node.zIndex, top: `${node.top}px`, left: `${node.left}px` }"
     @click="handleClick"
   >
-    <!-- {{ node.zIndex }}-{{ node.type }} -->
-    <!-- {{ node.id }} -->
-    <img :src="IMG_MAP[ICON_MAPPING[node.type]]" width="40" height="40" :alt="`${ICON_MAPPING[node.type]}`">
+    <img :src="IMG_MAP[ICON_MAPPING[node.type]]" width="36" height="36" :alt="`${ICON_MAPPING[node.type]}`">
     <div v-if="isFreeze" class="mask" />
   </div>
 </template>
@@ -67,13 +68,13 @@ function handleClick() {
 .card {
   width: 40px;
   height: 40px;
-  background: linear-gradient(145deg, #FFFFFF, #F0F8FF);
+  background: linear-gradient(145deg, #FFF8DC, #F5F5DC);
   display: flex;
   align-items: center;
   justify-content: center;
   position: relative;
   border-radius: 12px;
-  border: 2px solid #FFB6C1;
+  border: 2px solid #D2B48C;
   box-shadow: 
     0 4px 8px rgba(0,0,0,0.15),
     0 2px 4px rgba(0,0,0,0.1),
@@ -89,7 +90,7 @@ function handleClick() {
     0 6px 16px rgba(0,0,0,0.2),
     0 3px 6px rgba(0,0,0,0.15),
     inset 0 1px 0 rgba(255,255,255,0.9);
-  border-color: #FF69B4;
+  border-color: #CD853F;
 }
 
 .card:active {
